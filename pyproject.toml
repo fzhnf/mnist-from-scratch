@@ -1,0 +1,35 @@
+[project]
+name = "mnist-cnn-demo"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "anywidget>=0.9.0",
+    "marimo>=0.23.4",
+    "matplotlib>=3.10.9",
+    "numpy",
+    "pandas>=3.0.0",
+    "pillow>=12.2.0",
+    "pymde>=0.3.0",
+    "torch>=2.11.0",
+    "torchvision>=0.26.0",
+    "traitlets",
+    "triton-rocm; sys_platform == 'linux'",
+]
+
+[[tool.uv.index]]
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm7.2"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+  { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
+]
+triton-rocm = [
+  { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
+]
