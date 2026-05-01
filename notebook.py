@@ -6,9 +6,6 @@
 #     "numpy",
 #     "pandas>=3.0.0",
 #     "pillow>=12.2.0",
-#     "pymde>=0.3.0",
-#     "torch>=2.0.0",
-#     "torchvision>=0.20.0",
 #     "anywidget>=0.9.0",
 #     "traitlets",
 # ]
@@ -23,20 +20,27 @@ with app.setup:
     import marimo as mo
     import matplotlib.pyplot as plt
     import pandas as pd
-    import pymde
-    import torch
-    import torchvision
     import numpy as np
     import anywidget
     import traitlets
     from PIL import Image
     from types import SimpleNamespace
+    import sys, io
 
-    _ds_train = torchvision.datasets.MNIST(root="data/", train=True, download=True)
-    _ds_test  = torchvision.datasets.MNIST(root="data/", train=False, download=True)
+    _REPO = "https://raw.githubusercontent.com/fzhnf/mnist-from-scratch/main/"
+
+    if sys.platform == "emscripten":
+        import urllib.request
+        _d = np.load(io.BytesIO(urllib.request.urlopen(_REPO + "mnist_data.npz").read()))
+        _emb = np.load(io.BytesIO(urllib.request.urlopen(_REPO + "embedding.npy").read()))
+    else:
+        _d = np.load("mnist_data.npz")
+        _emb = np.load("embedding.npy")
+
     mnist = SimpleNamespace(
-        data=torch.cat([_ds_train.data, _ds_test.data]).float().reshape(-1, 784) / 255.0,
-        attributes={"digits": torch.cat([_ds_train.targets, _ds_test.targets])},
+        data=_d["X"].astype(np.float32) / 255.0,
+        attributes={"digits": _d["y"]},
+        embedding=_emb,
     )
 
 
@@ -104,48 +108,30 @@ def _():
     return
 
 
-@app.function
-@mo.persistent_cache
-def compute_embedding(embedding_dim, constraint):
-    mo.output.append(
-        mo.md("Your embedding is being computed ... hang tight!").callout(kind="warn")
-    )
-    mde = pymde.preserve_neighbors(
-        mnist.data,
-        embedding_dim=embedding_dim,
-        constraint=constraint,
-        device="cuda" if torch.cuda.is_available() else "cpu",
-        verbose=True,
-    )
-    X = mde.embed(verbose=True)
-    mo.output.clear()
-    return X
-
-
 @app.cell
 def _():
-    embedding_dimension = 2
-    constraint = pymde.Standardized()
-    return constraint, embedding_dimension
-
-
-@app.cell
-def _(constraint, embedding_dimension):
-    embedding = compute_embedding(embedding_dimension, constraint)
+    embedding = mnist.embedding
     return (embedding,)
 
 
 @app.cell
 def _(embedding):
-    ax = pymde.plot(embedding, color_by=mnist.attributes["digits"])
-    ax = mo.ui.matplotlib(ax)
+    _colors = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00",
+               "#a65628", "#f781bf", "#999999", "#dede00", "#00bcd4"]
+    fig, _ax = plt.subplots(figsize=(8, 6))
+    for _d in range(10):
+        _m = mnist.attributes["digits"] == _d
+        _ax.scatter(embedding[_m, 0], embedding[_m, 1],
+                    c=_colors[_d], s=1, alpha=0.3, label=str(_d))
+    _ax.legend(markerscale=5, title="Digit")
+    ax = mo.ui.matplotlib(_ax)
     ax
     return (ax,)
 
 
 @app.cell
 def _(ax, embedding):
-    mask = ax.value.get_mask(embedding[:, 0].cpu(), embedding[:, 1].cpu())
+    mask = ax.value.get_mask(embedding[:, 0], embedding[:, 1])
     return (mask,)
 
 
@@ -198,13 +184,13 @@ def show_images(indices, max_images=10):
 
 @app.cell
 def _(embedding):
-    indices = torch.arange(mnist.data.shape[0]).numpy()
+    indices = np.arange(mnist.data.shape[0])
     df = pd.DataFrame(
         {
             "index": indices,
-            "x": embedding[:, 0].cpu().numpy(),
-            "y": embedding[:, 1].cpu().numpy(),
-            "digit": mnist.attributes["digits"][indices].cpu().numpy(),
+            "x": embedding[:, 0],
+            "y": embedding[:, 1],
+            "digit": mnist.attributes["digits"][indices],
         }
     )
     return (df,)
@@ -240,17 +226,18 @@ def _(canvas_ui):
         )
         _flat = np.array(_img, dtype=np.float32).ravel() / 255.0
 
-        _X = mnist.data.float().reshape(-1, 784)[:10_000]
+        _X = mnist.data[:10_000]
         _y = mnist.attributes["digits"][:10_000]
-        _q = torch.tensor(_flat).unsqueeze(0)
-        _, _idx = torch.topk(torch.cdist(_q, _X)[0], k=15, largest=False)
-        _probs = torch.bincount(_y[_idx].long(), minlength=10).float() / 15
+        _q = _flat.reshape(1, -1)
+        _dists = np.sqrt(((_X - _q) ** 2).sum(axis=1))
+        _idx = np.argpartition(_dists, 15)[:15]
+        _probs = np.bincount(_y[_idx].astype(int), minlength=10).astype(float) / 15
         _pred = int(_probs.argmax())
 
         _colors = ["steelblue"] * 10
         _colors[_pred] = "tomato"
         _fig, _ax = plt.subplots(figsize=(3, 4))
-        _ax.barh(range(10), _probs.numpy(), color=_colors)
+        _ax.barh(range(10), _probs, color=_colors)
         _ax.set_yticks(range(10))
         _ax.set_yticklabels([str(i) for i in range(10)])
         _ax.set_xlim(0, 1)
