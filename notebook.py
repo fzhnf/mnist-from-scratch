@@ -97,8 +97,92 @@ class DrawWidget(anywidget.AnyWidget):
 @app.cell(hide_code=True)
 def _():
     mo.md("""
-    # MNIST Explorer
+    # MNIST from Scratch
     """)
+    return
+
+
+@app.cell
+def _():
+    get_weights, set_weights = mo.state(mnist.weights)
+    return get_weights, set_weights
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md("""
+    ## Training
+
+    3-layer MLP — **784 → 256 → 128 → 10** — trained with Adam for 10 epochs.
+    In WASM the model is pre-trained; click the button below to retrain locally.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    train_btn = mo.ui.run_button(label="Train locally")
+    if sys.platform == "emscripten":
+        mo.md("_Running in WASM — pre-trained weights loaded (97.5 % test accuracy)._")
+    else:
+        train_btn
+    return (train_btn,)
+
+
+@app.cell
+def _(set_weights, train_btn):
+    mo.stop(sys.platform == "emscripten")
+    mo.stop(not train_btn.value)
+    try:
+        import torch
+        import torch.nn as nn
+    except ImportError:
+        mo.stop(True, mo.md("_torch not installed — `pip install torch` to enable training._"))
+
+    _X_train = mnist.data[:60000]
+    _y_train = mnist.attributes["digits"][:60000].astype(np.int64)
+    _X_test  = mnist.data[60000:]
+    _y_test  = mnist.attributes["digits"][60000:].astype(np.int64)
+    _Xtr = torch.tensor(_X_train)
+    _ytr = torch.tensor(_y_train)
+    _Xte = torch.tensor(_X_test)
+    _yte = torch.tensor(_y_test)
+    _device = "cuda" if torch.cuda.is_available() else "cpu"
+    _Xtr, _ytr = _Xtr.to(_device), _ytr.to(_device)
+    _Xte, _yte = _Xte.to(_device), _yte.to(_device)
+
+    _model = nn.Sequential(
+        nn.Linear(784, 256), nn.ReLU(),
+        nn.Linear(256, 128), nn.ReLU(),
+        nn.Linear(128, 10),
+    ).to(_device)
+    _opt = torch.optim.Adam(_model.parameters(), lr=1e-3)
+    _loss_fn = nn.CrossEntropyLoss()
+
+    _rows = []
+    with mo.status.progress_bar(total=10, title="Training") as _bar:
+        for _epoch in range(10):
+            _model.train()
+            for _i in range(0, len(_Xtr), 256):
+                _xb, _yb = _Xtr[_i:_i+256], _ytr[_i:_i+256]
+                _opt.zero_grad()
+                _loss_fn(_model(_xb), _yb).backward()
+                _opt.step()
+            _model.eval()
+            with torch.no_grad():
+                _acc = (_model(_Xte).argmax(1) == _yte).float().mean().item()
+            _rows.append({"epoch": _epoch + 1, "test_accuracy": round(_acc, 4)})
+            _bar.update(title=f"epoch {_epoch + 1}/10  acc={_acc:.4f}")
+
+    _W1 = _model[0].weight.T.detach().cpu().numpy()
+    _b1 = _model[0].bias.detach().cpu().numpy()
+    _W2 = _model[2].weight.T.detach().cpu().numpy()
+    _b2 = _model[2].bias.detach().cpu().numpy()
+    _W3 = _model[4].weight.T.detach().cpu().numpy()
+    _b3 = _model[4].bias.detach().cpu().numpy()
+    set_weights({"W1": _W1, "b1": _b1, "W2": _W2, "b2": _b2, "W3": _W3, "b3": _b3})
+
+    mo.ui.table(pd.DataFrame(_rows))
     return
 
 
@@ -218,20 +302,21 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(canvas_ui):
+def _(canvas_ui, get_weights):
     _px = canvas_ui.value.get("pixels", [])
 
     if not _px:
         _output = mo.md("_Draw a digit above to see predictions._")
     else:
         _flat = np.array(_px, dtype=np.float32)  # 784 floats, already resized in JS
+        _w = get_weights()
 
         def _relu(x): return np.maximum(0, x)
         def _softmax(x): e = np.exp(x - x.max()); return e / e.sum()
 
-        _h1 = _relu(_flat @ mnist.weights["W1"] + mnist.weights["b1"])
-        _h2 = _relu(_h1   @ mnist.weights["W2"] + mnist.weights["b2"])
-        _logits = _h2     @ mnist.weights["W3"] + mnist.weights["b3"]
+        _h1 = _relu(_flat @ _w["W1"] + _w["b1"])
+        _h2 = _relu(_h1   @ _w["W2"] + _w["b2"])
+        _logits = _h2     @ _w["W3"] + _w["b3"]
         _probs = _softmax(_logits)
         _pred = int(_probs.argmax())
 
