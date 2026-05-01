@@ -29,9 +29,16 @@ with app.setup:
 
     if sys.platform == "emscripten":
         import urllib.request
-        _d = np.load(io.BytesIO(urllib.request.urlopen(_REPO + "mnist_data.npz").read()))
-        _emb = np.load(io.BytesIO(urllib.request.urlopen(_REPO + "embedding.npy").read()))
-        _w = np.load(io.BytesIO(urllib.request.urlopen(_REPO + "model_weights.npz").read()))
+
+        _d = np.load(
+            io.BytesIO(urllib.request.urlopen(_REPO + "mnist_data.npz").read())
+        )
+        _emb = np.load(
+            io.BytesIO(urllib.request.urlopen(_REPO + "embedding.npy").read())
+        )
+        _w = np.load(
+            io.BytesIO(urllib.request.urlopen(_REPO + "model_weights.npz").read())
+        )
     else:
         _d = np.load("mnist_data.npz")
         _emb = np.load("embedding.npy")
@@ -97,7 +104,7 @@ class DrawWidget(anywidget.AnyWidget):
 @app.cell(hide_code=True)
 def _():
     mo.md("""
-    # Klasifikasi Digit MNIST dari Nol
+    # Klasifikasi Digit MNIST
     ### Laporan Progress 1
 
     | | |
@@ -120,8 +127,7 @@ def _():
     mo.md("""
     ## Pendahuluan & Tujuan Eksperimen Awal
 
-    Tujuan eksperimen awal ini adalah membangun sistem klasifikasi digit tulisan tangan secara
-    *dari nol* (*from scratch*) menggunakan dataset MNIST. Masalah utama yang diselesaikan adalah
+    Tujuan eksperimen awal ini adalah membangun sistem klasifikasi digit tulisan tangan menggunakan dataset MNIST. Masalah utama yang diselesaikan adalah
     mengklasifikasikan gambar digit 0–9 (28×28 piksel, grayscale) ke dalam 10 kelas yang tepat.
 
     Pipeline yang dibangun mencakup:
@@ -275,12 +281,17 @@ def _(set_weights, train_btn):
         import torch
         import torch.nn as nn
     except ImportError:
-        mo.stop(True, mo.md("_torch tidak terinstal — `pip install torch` untuk melatih secara lokal._"))
+        mo.stop(
+            True,
+            mo.md(
+                "_torch tidak terinstal — `pip install torch` untuk melatih secara lokal._"
+            ),
+        )
 
     _X_train = mnist.data[:60000]
     _y_train = mnist.attributes["digits"][:60000].astype(np.int64)
-    _X_test  = mnist.data[60000:]
-    _y_test  = mnist.attributes["digits"][60000:].astype(np.int64)
+    _X_test = mnist.data[60000:]
+    _y_test = mnist.attributes["digits"][60000:].astype(np.int64)
     _Xtr = torch.tensor(_X_train)
     _ytr = torch.tensor(_y_train)
     _Xte = torch.tensor(_X_test)
@@ -290,8 +301,10 @@ def _(set_weights, train_btn):
     _Xte, _yte = _Xte.to(_device), _yte.to(_device)
 
     _model = nn.Sequential(
-        nn.Linear(784, 256), nn.ReLU(),
-        nn.Linear(256, 128), nn.ReLU(),
+        nn.Linear(784, 256),
+        nn.ReLU(),
+        nn.Linear(256, 128),
+        nn.ReLU(),
         nn.Linear(128, 10),
     ).to(_device)
     _opt = torch.optim.Adam(_model.parameters(), lr=1e-3)
@@ -303,7 +316,7 @@ def _(set_weights, train_btn):
             _model.train()
             _epoch_loss, _n_batches = 0.0, 0
             for _i in range(0, len(_Xtr), 256):
-                _xb, _yb = _Xtr[_i:_i+256], _ytr[_i:_i+256]
+                _xb, _yb = _Xtr[_i : _i + 256], _ytr[_i : _i + 256]
                 _opt.zero_grad()
                 _l = _loss_fn(_model(_xb), _yb)
                 _l.backward()
@@ -314,13 +327,15 @@ def _(set_weights, train_btn):
             with torch.no_grad():
                 _val_loss = _loss_fn(_model(_Xte), _yte).item()
                 _acc = (_model(_Xte).argmax(1) == _yte).float().mean().item()
-            _rows.append({
-                "Epoch": _epoch + 1,
-                "Training Loss": round(_epoch_loss / _n_batches, 4),
-                "Test Loss": round(_val_loss, 4),
-                "Test Accuracy": round(_acc, 4),
-            })
-            _bar.update(title=f"epoch {_epoch+1}/10  acc={_acc:.4f}")
+            _rows.append(
+                {
+                    "Epoch": _epoch + 1,
+                    "Training Loss": round(_epoch_loss / _n_batches, 4),
+                    "Test Loss": round(_val_loss, 4),
+                    "Test Accuracy": round(_acc, 4),
+                }
+            )
+            _bar.update(title=f"epoch {_epoch + 1}/10  acc={_acc:.4f}")
 
     _W1 = _model[0].weight.T.detach().cpu().numpy()
     _b1 = _model[0].bias.detach().cpu().numpy()
@@ -334,20 +349,29 @@ def _(set_weights, train_btn):
     _fig, (_ax1, _ax2) = plt.subplots(1, 2, figsize=(10, 3.5))
     _ax1.plot(_df["Epoch"], _df["Training Loss"], "b-o", label="Training Loss")
     _ax1.plot(_df["Epoch"], _df["Test Loss"], "r-o", label="Test Loss")
-    _ax1.set_xlabel("Epoch"); _ax1.set_ylabel("Loss")
-    _ax1.set_title("Loss vs Epoch"); _ax1.legend(); _ax1.grid(True, alpha=0.3)
+    _ax1.set_xlabel("Epoch")
+    _ax1.set_ylabel("Loss")
+    _ax1.set_title("Loss vs Epoch")
+    _ax1.legend()
+    _ax1.grid(True, alpha=0.3)
     _ax2.plot(_df["Epoch"], _df["Test Accuracy"], "g-o")
-    _ax2.set_xlabel("Epoch"); _ax2.set_ylabel("Accuracy")
-    _ax2.set_title("Test Accuracy vs Epoch"); _ax2.grid(True, alpha=0.3)
+    _ax2.set_xlabel("Epoch")
+    _ax2.set_ylabel("Accuracy")
+    _ax2.set_title("Test Accuracy vs Epoch")
+    _ax2.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    mo.vstack([
-        mo.md(f"**Training Loss Terakhir:** {_df['Training Loss'].iloc[-1]}  ·  "
-              f"**Test Loss Terakhir:** {_df['Test Loss'].iloc[-1]}  ·  "
-              f"**Test Accuracy:** {_df['Test Accuracy'].iloc[-1]:.4f}"),
-        mo.ui.table(_df),
-        mo.as_html(_fig),
-    ])
+    mo.vstack(
+        [
+            mo.md(
+                f"**Training Loss Terakhir:** {_df['Training Loss'].iloc[-1]}  ·  "
+                f"**Test Loss Terakhir:** {_df['Test Loss'].iloc[-1]}  ·  "
+                f"**Test Accuracy:** {_df['Test Accuracy'].iloc[-1]:.4f}"
+            ),
+            mo.ui.table(_df),
+            mo.as_html(_fig),
+        ]
+    )
     return
 
 
@@ -370,13 +394,29 @@ def _():
 
 @app.cell
 def _(embedding):
-    _colors = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00",
-               "#a65628", "#f781bf", "#999999", "#dede00", "#00bcd4"]
+    _colors = [
+        "#e41a1c",
+        "#377eb8",
+        "#4daf4a",
+        "#984ea3",
+        "#ff7f00",
+        "#a65628",
+        "#f781bf",
+        "#999999",
+        "#dede00",
+        "#00bcd4",
+    ]
     fig, _ax = plt.subplots(figsize=(8, 6))
     for _d in range(10):
         _m = mnist.attributes["digits"] == _d
-        _ax.scatter(embedding[_m, 0], embedding[_m, 1],
-                    c=_colors[_d], s=1, alpha=0.3, label=str(_d))
+        _ax.scatter(
+            embedding[_m, 0],
+            embedding[_m, 1],
+            c=_colors[_d],
+            s=1,
+            alpha=0.3,
+            label=str(_d),
+        )
     _ax.legend(markerscale=5, title="Digit")
     ax = mo.ui.matplotlib(_ax)
     ax
@@ -478,12 +518,16 @@ def _(canvas_ui, get_weights):
         _flat = np.array(_px, dtype=np.float32)
         _w = get_weights()
 
-        def _relu(x): return np.maximum(0, x)
-        def _softmax(x): e = np.exp(x - x.max()); return e / e.sum()
+        def _relu(x):
+            return np.maximum(0, x)
+
+        def _softmax(x):
+            e = np.exp(x - x.max())
+            return e / e.sum()
 
         _h1 = _relu(_flat @ _w["W1"] + _w["b1"])
-        _h2 = _relu(_h1   @ _w["W2"] + _w["b2"])
-        _logits = _h2     @ _w["W3"] + _w["b3"]
+        _h2 = _relu(_h1 @ _w["W2"] + _w["b2"])
+        _logits = _h2 @ _w["W3"] + _w["b3"]
         _probs = _softmax(_logits)
         _pred = int(_probs.argmax())
 
@@ -499,10 +543,12 @@ def _(canvas_ui, get_weights):
         _ax.invert_yaxis()
         plt.tight_layout()
 
-        _output = mo.vstack([
-            mo.md(f"### Prediksi: **{_pred}**"),
-            mo.as_html(_fig),
-        ])
+        _output = mo.vstack(
+            [
+                mo.md(f"### Prediksi: **{_pred}**"),
+                mo.as_html(_fig),
+            ]
+        )
 
     _output
     return
