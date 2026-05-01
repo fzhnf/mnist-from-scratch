@@ -5,7 +5,6 @@
 #     "matplotlib>=3.10.9",
 #     "numpy",
 #     "pandas>=3.0.0",
-#     "pillow>=12.2.0",
 #     "anywidget>=0.9.0",
 #     "traitlets",
 # ]
@@ -23,7 +22,6 @@ with app.setup:
     import numpy as np
     import anywidget
     import traitlets
-    from PIL import Image
     from types import SimpleNamespace
     import sys, io
 
@@ -33,14 +31,17 @@ with app.setup:
         import urllib.request
         _d = np.load(io.BytesIO(urllib.request.urlopen(_REPO + "mnist_data.npz").read()))
         _emb = np.load(io.BytesIO(urllib.request.urlopen(_REPO + "embedding.npy").read()))
+        _w = np.load(io.BytesIO(urllib.request.urlopen(_REPO + "model_weights.npz").read()))
     else:
         _d = np.load("mnist_data.npz")
         _emb = np.load("embedding.npy")
+        _w = np.load("model_weights.npz")
 
     mnist = SimpleNamespace(
         data=_d["X"].astype(np.float32) / 255.0,
         attributes={"digits": _d["y"]},
         embedding=_emb,
+        weights=_w,
     )
 
 
@@ -68,11 +69,14 @@ class DrawWidget(anywidget.AnyWidget):
       });
 
       function push() {
-        const d = ctx.getImageData(0, 0, SIZE, SIZE).data;
+        const small = document.createElement("canvas");
+        small.width = 28; small.height = 28;
+        small.getContext("2d").drawImage(canvas, 0, 0, 28, 28);
+        const d = small.getContext("2d").getImageData(0, 0, 28, 28).data;
         const out = [];
         for (let i = 0; i < d.length; i += 4)
           out.push((255 - d[i]) / 255);
-        model.set("pixels", out);
+        model.set("pixels", out);   // 784 floats instead of 40,000
         model.save_changes();
       }
 
@@ -220,18 +224,15 @@ def _(canvas_ui):
     if not _px:
         _output = mo.md("_Draw a digit above to see predictions._")
     else:
-        _arr = np.array(_px, dtype=np.float32).reshape(200, 200)
-        _img = Image.fromarray((_arr * 255).astype(np.uint8), "L").resize(
-            (28, 28), Image.Resampling.LANCZOS
-        )
-        _flat = np.array(_img, dtype=np.float32).ravel() / 255.0
+        _flat = np.array(_px, dtype=np.float32)  # 784 floats, already resized in JS
 
-        _X = mnist.data[:10_000]
-        _y = mnist.attributes["digits"][:10_000]
-        _q = _flat.reshape(1, -1)
-        _dists = np.sqrt(((_X - _q) ** 2).sum(axis=1))
-        _idx = np.argpartition(_dists, 15)[:15]
-        _probs = np.bincount(_y[_idx].astype(int), minlength=10).astype(float) / 15
+        def _relu(x): return np.maximum(0, x)
+        def _softmax(x): e = np.exp(x - x.max()); return e / e.sum()
+
+        _h1 = _relu(_flat @ mnist.weights["W1"] + mnist.weights["b1"])
+        _h2 = _relu(_h1   @ mnist.weights["W2"] + mnist.weights["b2"])
+        _logits = _h2     @ mnist.weights["W3"] + mnist.weights["b3"]
+        _probs = _softmax(_logits)
         _pred = int(_probs.argmax())
 
         _colors = ["steelblue"] * 10
