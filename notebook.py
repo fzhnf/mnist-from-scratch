@@ -212,14 +212,14 @@ def _():
 
 @app.cell
 def _():
-    canvas_ui = DrawWidget()
+    canvas_ui = mo.ui.anywidget(DrawWidget())
     canvas_ui
     return (canvas_ui,)
 
 
 @app.cell(hide_code=True)
 def _(canvas_ui):
-    _px = canvas_ui.pixels
+    _px = canvas_ui.value.get("pixels", [])
 
     if not _px:
         _output = mo.md("_Draw a digit above to see predictions._")
