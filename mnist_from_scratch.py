@@ -76,7 +76,7 @@ class DrawWidget(anywidget.AnyWidget):
         const out = [];
         for (let i = 0; i < d.length; i += 4)
           out.push((255 - d[i]) / 255);
-        model.set("pixels", out);   // 784 floats instead of 40,000
+        model.set("pixels", out);
         model.save_changes();
       }
 
@@ -97,7 +97,127 @@ class DrawWidget(anywidget.AnyWidget):
 @app.cell(hide_code=True)
 def _():
     mo.md("""
-    # MNIST from Scratch
+    # Klasifikasi Digit MNIST dari Nol
+    ### Laporan Progress 1
+
+    | | |
+    |:--|:--|
+    | **Kelompok** | Kelompok 4 |
+    | **Anggota 1** | Azhar Rizqullah Fakhri Ismail — 11221052 |
+    | **Anggota 2** | Pahril Dwi Saputra — 11221056 |
+    | **Anggota 3** | Faiz Ahnaf Samudra Aziz — 11221076 |
+    | **Anggota 4** | Ayu Nabila Andara Wati — 11221084 |
+
+    **Tautan Repositori GitHub:** https://github.com/fzhnf/mnist-from-scratch
+
+    ---
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md("""
+    ## Pendahuluan & Tujuan Eksperimen Awal
+
+    Tujuan eksperimen awal ini adalah membangun sistem klasifikasi digit tulisan tangan secara
+    *dari nol* (*from scratch*) menggunakan dataset MNIST. Masalah utama yang diselesaikan adalah
+    mengklasifikasikan gambar digit 0–9 (28×28 piksel, grayscale) ke dalam 10 kelas yang tepat.
+
+    Pipeline yang dibangun mencakup:
+
+    1. Memuat dan melakukan pra-pemrosesan dataset MNIST,
+    2. Melatih model **Multi-Layer Perceptron (MLP)** tiga lapisan dari awal menggunakan PyTorch,
+    3. Menyimpan bobot model yang terlatih dalam format `.npz`,
+    4. Menjalankan inferensi menggunakan *forward pass* berbasis NumPy (tanpa PyTorch di *runtime*)
+       sehingga kompatibel dengan lingkungan WebAssembly (WASM/molab),
+    5. Memvisualisasikan ruang fitur menggunakan **Minimum Distortion Embedding (MDE)** 2D,
+    6. Menyediakan antarmuka gambar interaktif untuk menguji model secara langsung.
+
+    Eksperimen ini merupakan *baseline* sebelum eksplorasi arsitektur lanjutan (misalnya CNN atau
+    ResNet) pada tahap berikutnya.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md("""
+    ## Metodologi Data (Data Pipeline)
+
+    ### Deskripsi Dataset
+
+    | Atribut | Keterangan |
+    |:--|:--|
+    | **Sumber Data** | MNIST (*Mixed National Institute of Standards and Technology*), Yann LeCun et al. — diakses via `torchvision.datasets.MNIST` |
+    | **Jumlah Data Total** | 70.000 gambar grayscale 28×28 piksel, label digit 0–9 |
+    | **Pembagian Data** | 60.000 Training · 10.000 Testing (pembagian bawaan torchvision; test set digunakan sebagai set validasi) |
+    | **Distribusi Kelas** | 10 kelas seimbang (*balanced*): ±6.000 sampel per kelas di set pelatihan |
+
+    ### Pra-pemrosesan Data
+
+    1. **Flatten**: gambar 28×28 piksel di-*flatten* menjadi vektor **784 dimensi**.
+    2. **Normalisasi**: nilai piksel dari rentang \[0, 255\] (uint8) dinormalisasi ke \[0.0, 1.0\]
+       (float32) dengan membagi 255.
+    3. Tidak ada augmentasi — dataset sudah cukup besar dan beragam untuk *baseline* ini.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    _indices = [int(np.where(mnist.attributes["digits"] == d)[0][0]) for d in range(10)]
+    _images = mnist.data.reshape(-1, 28, 28)[_indices]
+    _fig, _axes = plt.subplots(1, 10, figsize=(12, 1.6))
+    for _i, (_ax, _im) in enumerate(zip(_axes, _images)):
+        _ax.imshow(_im, cmap="gray")
+        _ax.set_title(str(_i), fontsize=9)
+        _ax.axis("off")
+    _fig.suptitle("Contoh satu gambar per kelas (digit 0–9)", fontsize=9, y=1.08)
+    plt.tight_layout()
+    _fig
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    _counts = np.bincount(mnist.attributes["digits"][:60000].astype(int), minlength=10)
+    _fig, _ax = plt.subplots(figsize=(7, 3))
+    _ax.bar(range(10), _counts, color="steelblue")
+    _ax.set_xticks(range(10))
+    _ax.set_xlabel("Digit")
+    _ax.set_ylabel("Jumlah Sampel")
+    _ax.set_title("Distribusi Kelas — Training Set (60.000 sampel)")
+    for _x, _c in enumerate(_counts):
+        _ax.text(_x, _c + 60, str(_c), ha="center", fontsize=8)
+    plt.tight_layout()
+    _fig
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md("""
+    ## Arsitektur Baseline Model
+
+    **Jenis Arsitektur:** Multi-Layer Perceptron (MLP)
+
+    | Layer | Jenis | Dimensi Output | Aktivasi |
+    |:--|:--|:--|:--|
+    | Input | — | 784 | — |
+    | Hidden 1 | `nn.Linear` | 256 | ReLU |
+    | Hidden 2 | `nn.Linear` | 128 | ReLU |
+    | Output | `nn.Linear` | 10 | — (Softmax implisit via `CrossEntropyLoss`) |
+
+    ```
+    Input (784)
+        └─ Linear(784 → 256) + ReLU
+               └─ Linear(256 → 128) + ReLU
+                      └─ Linear(128 → 10)  →  argmax  →  Prediksi digit
+    ```
+
+    Bobot model hasil pelatihan disimpan ke `model_weights.npz` dan dimuat ulang sebagai array
+    NumPy biasa — sehingga inferensi tidak memerlukan PyTorch dan berjalan di WASM.
     """)
     return
 
@@ -111,10 +231,28 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md("""
-    ## Training
+    ## Hasil Eksperimen Training
 
-    3-layer MLP — **784 → 256 → 128 → 10** — trained with Adam for 10 epochs.
-    In WASM the model is pre-trained; click the button below to retrain locally.
+    ### Konfigurasi Hyperparameter (Baseline)
+
+    | Hyperparameter | Nilai |
+    |:--|:--|
+    | **Epochs** | 10 |
+    | **Batch Size** | 256 |
+    | **Learning Rate** | 0.001 |
+    | **Optimizer** | Adam |
+    | **Loss Function** | Cross Entropy Loss |
+
+    ### Hasil Evaluasi
+
+    Di lingkungan WASM (molab) model pra-terlatih langsung dimuat — akurasi test **~97,5 %**.
+    Tekan **Train locally** di bawah untuk melatih ulang dan melihat nilai *loss* serta kurva
+    akurasi per epoch secara langsung. Setelah pelatihan, demo interaktif di bagian bawah
+    langsung menggunakan bobot yang baru dilatih.
+
+    > **Ekspor PDF:** jalankan notebook secara lokal, klik *Train locally*, tunggu selesai,
+    > lalu cetak halaman (Ctrl+P → Simpan sebagai PDF) untuk laporan lengkap dengan tabel
+    > dan grafik.
     """)
     return
 
@@ -123,7 +261,7 @@ def _():
 def _():
     train_btn = mo.ui.run_button(label="Train locally")
     if sys.platform == "emscripten":
-        mo.md("_Running in WASM — pre-trained weights loaded (97.5 % test accuracy)._")
+        mo.md("_Berjalan di WASM — model pra-terlatih dimuat (akurasi ~97,5 %)._")
     else:
         train_btn
     return (train_btn,)
@@ -137,7 +275,7 @@ def _(set_weights, train_btn):
         import torch
         import torch.nn as nn
     except ImportError:
-        mo.stop(True, mo.md("_torch not installed — `pip install torch` to enable training._"))
+        mo.stop(True, mo.md("_torch tidak terinstal — `pip install torch` untuk melatih secara lokal._"))
 
     _X_train = mnist.data[:60000]
     _y_train = mnist.attributes["digits"][:60000].astype(np.int64)
@@ -160,19 +298,29 @@ def _(set_weights, train_btn):
     _loss_fn = nn.CrossEntropyLoss()
 
     _rows = []
-    with mo.status.progress_bar(total=10, title="Training") as _bar:
+    with mo.status.progress_bar(total=10, title="Melatih model...") as _bar:
         for _epoch in range(10):
             _model.train()
+            _epoch_loss, _n_batches = 0.0, 0
             for _i in range(0, len(_Xtr), 256):
                 _xb, _yb = _Xtr[_i:_i+256], _ytr[_i:_i+256]
                 _opt.zero_grad()
-                _loss_fn(_model(_xb), _yb).backward()
+                _l = _loss_fn(_model(_xb), _yb)
+                _l.backward()
                 _opt.step()
+                _epoch_loss += _l.item()
+                _n_batches += 1
             _model.eval()
             with torch.no_grad():
+                _val_loss = _loss_fn(_model(_Xte), _yte).item()
                 _acc = (_model(_Xte).argmax(1) == _yte).float().mean().item()
-            _rows.append({"epoch": _epoch + 1, "test_accuracy": round(_acc, 4)})
-            _bar.update(title=f"epoch {_epoch + 1}/10  acc={_acc:.4f}")
+            _rows.append({
+                "Epoch": _epoch + 1,
+                "Training Loss": round(_epoch_loss / _n_batches, 4),
+                "Test Loss": round(_val_loss, 4),
+                "Test Accuracy": round(_acc, 4),
+            })
+            _bar.update(title=f"epoch {_epoch+1}/10  acc={_acc:.4f}")
 
     _W1 = _model[0].weight.T.detach().cpu().numpy()
     _b1 = _model[0].bias.detach().cpu().numpy()
@@ -182,16 +330,34 @@ def _(set_weights, train_btn):
     _b3 = _model[4].bias.detach().cpu().numpy()
     set_weights({"W1": _W1, "b1": _b1, "W2": _W2, "b2": _b2, "W3": _W3, "b3": _b3})
 
-    mo.ui.table(pd.DataFrame(_rows))
+    _df = pd.DataFrame(_rows)
+    _fig, (_ax1, _ax2) = plt.subplots(1, 2, figsize=(10, 3.5))
+    _ax1.plot(_df["Epoch"], _df["Training Loss"], "b-o", label="Training Loss")
+    _ax1.plot(_df["Epoch"], _df["Test Loss"], "r-o", label="Test Loss")
+    _ax1.set_xlabel("Epoch"); _ax1.set_ylabel("Loss")
+    _ax1.set_title("Loss vs Epoch"); _ax1.legend(); _ax1.grid(True, alpha=0.3)
+    _ax2.plot(_df["Epoch"], _df["Test Accuracy"], "g-o")
+    _ax2.set_xlabel("Epoch"); _ax2.set_ylabel("Accuracy")
+    _ax2.set_title("Test Accuracy vs Epoch"); _ax2.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    mo.vstack([
+        mo.md(f"**Training Loss Terakhir:** {_df['Training Loss'].iloc[-1]}  ·  "
+              f"**Test Loss Terakhir:** {_df['Test Loss'].iloc[-1]}  ·  "
+              f"**Test Accuracy:** {_df['Test Accuracy'].iloc[-1]:.4f}"),
+        mo.ui.table(_df),
+        mo.as_html(_fig),
+    ])
     return
 
 
 @app.cell(hide_code=True)
 def _():
     mo.md("""
-    ## Feature Space
+    ## Visualisasi Ruang Fitur (Feature Space)
 
-    Each point is a digit in 2D MDE space. **Drag to select a cluster.**
+    Setiap titik mewakili satu digit dalam ruang 2D hasil **Minimum Distortion Embedding (MDE)**.
+    **Seret untuk memilih klaster** dan lihat gambar-gambar di dalamnya.
     """)
     return
 
@@ -239,11 +405,11 @@ def _(mask, table):
     )
     mo.md(
         f"""
-        **Here's a preview of the images you've selected**:
+        **Pratinjau gambar yang dipilih:**
 
         {mo.as_html(selected_images)}
 
-        Here's all the data you've selected.
+        Data lengkap seleksi:
 
         {table}
         """
@@ -287,9 +453,10 @@ def _(embedding):
 @app.cell(hide_code=True)
 def _():
     mo.md("""
-    ## Draw a Digit
+    ## Demo Interaktif
 
-    Draw below — the prediction updates when you release the mouse.
+    Gambar digit di kanvas di bawah — prediksi diperbarui setiap kali Anda melepas mouse.
+    Setelah klik *Train locally* di atas, model yang baru terlatih langsung digunakan di sini.
     """)
     return
 
@@ -306,9 +473,9 @@ def _(canvas_ui, get_weights):
     _px = canvas_ui.value.get("pixels", [])
 
     if not _px:
-        _output = mo.md("_Draw a digit above to see predictions._")
+        _output = mo.md("_Gambar digit di atas untuk melihat prediksi._")
     else:
-        _flat = np.array(_px, dtype=np.float32)  # 784 floats, already resized in JS
+        _flat = np.array(_px, dtype=np.float32)
         _w = get_weights()
 
         def _relu(x): return np.maximum(0, x)
@@ -328,12 +495,12 @@ def _(canvas_ui, get_weights):
         _ax.set_yticklabels([str(i) for i in range(10)])
         _ax.set_xlim(0, 1)
         _ax.set_xlabel("Confidence")
-        _ax.set_title(f"Prediction: {_pred}")
+        _ax.set_title(f"Prediksi: {_pred}")
         _ax.invert_yaxis()
         plt.tight_layout()
 
         _output = mo.vstack([
-            mo.md(f"### Prediction: **{_pred}**"),
+            mo.md(f"### Prediksi: **{_pred}**"),
             mo.as_html(_fig),
         ])
 
