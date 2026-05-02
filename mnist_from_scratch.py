@@ -26,6 +26,11 @@ with app.setup:
     import sys, io
 
     _REPO = "https://raw.githubusercontent.com/fzhnf/mnist-from-scratch/main/"
+    EPOCHS = 10
+    BATCH_SIZE = 256
+    LR = 0.001
+    OPTIMIZER = "Adam"
+    LOSS_FN = "CrossEntropyLoss"
 
     if sys.platform == "emscripten":
         import urllib.request
@@ -104,18 +109,16 @@ class DrawWidget(anywidget.AnyWidget):
 @app.cell(hide_code=True)
 def _():
     mo.md("""
-    # Klasifikasi Digit MNIST
-    ### Laporan Progress 1
+    # Klasifikasi Digit MNIST Kelompok 4
+    
+    anggota:
 
-    | | |
-    |:--|:--|
-    | **Kelompok** | Kelompok 4 |
-    | **Anggota 1** | Azhar Rizqullah Fakhri Ismail — 11221052 |
-    | **Anggota 2** | Pahril Dwi Saputra — 11221056 |
-    | **Anggota 3** | Faiz Ahnaf Samudra Aziz — 11221076 |
-    | **Anggota 4** | Ayu Nabila Andara Wati — 11221084 |
+    1. Azhar Rizqullah Fakhri Ismail 11221052 
+    1. Pahril Dwi Saputra 11221056 
+    1. Faiz Ahnaf Samudra Aziz 11221076 
+    1. Ayu Nabila Andara Wati 11221084 
 
-    **Tautan Repositori GitHub:** https://github.com/fzhnf/mnist-from-scratch
+    **Link Source code:** https://github.com/fzhnf/mnist-from-scratch
 
     ---
     """)
@@ -134,14 +137,7 @@ def _():
 
     1. Memuat dan melakukan pra-pemrosesan dataset MNIST,
     2. Melatih model **Multi-Layer Perceptron (MLP)** tiga lapisan dari awal menggunakan PyTorch,
-    3. Menyimpan bobot model yang terlatih dalam format `.npz`,
-    4. Menjalankan inferensi menggunakan *forward pass* berbasis NumPy (tanpa PyTorch di *runtime*)
-       sehingga kompatibel dengan lingkungan WebAssembly (WASM/molab),
-    5. Memvisualisasikan ruang fitur menggunakan **Minimum Distortion Embedding (MDE)** 2D,
-    6. Menyediakan antarmuka gambar interaktif untuk menguji model secara langsung.
-
-    Eksperimen ini merupakan *baseline* sebelum eksplorasi arsitektur lanjutan (misalnya CNN atau
-    ResNet) pada tahap berikutnya.
+    3. Menyediakan antarmuka gambar interaktif untuk menguji model secara langsung.
     """)
     return
 
@@ -165,7 +161,6 @@ def _():
     1. **Flatten**: gambar 28×28 piksel di-*flatten* menjadi vektor **784 dimensi**.
     2. **Normalisasi**: nilai piksel dari rentang \[0, 255\] (uint8) dinormalisasi ke \[0.0, 1.0\]
        (float32) dengan membagi 255.
-    3. Tidak ada augmentasi — dataset sudah cukup besar dan beragam untuk *baseline* ini.
     """)
     return
 
@@ -223,7 +218,7 @@ def _():
     ```
 
     Bobot model hasil pelatihan disimpan ke `model_weights.npz` dan dimuat ulang sebagai array
-    NumPy biasa — sehingga inferensi tidak memerlukan PyTorch dan berjalan di WASM.
+    NumPy biasa.
     """)
     return
 
@@ -236,29 +231,18 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    mo.md("""
+    mo.md(f"""
     ## Hasil Eksperimen Training
 
     ### Konfigurasi Hyperparameter (Baseline)
 
     | Hyperparameter | Nilai |
     |:--|:--|
-    | **Epochs** | 10 |
-    | **Batch Size** | 256 |
-    | **Learning Rate** | 0.001 |
-    | **Optimizer** | Adam |
-    | **Loss Function** | Cross Entropy Loss |
-
-    ### Hasil Evaluasi
-
-    Di lingkungan WASM (molab) model pra-terlatih langsung dimuat — akurasi test **~97,5 %**.
-    Tekan **Train locally** di bawah untuk melatih ulang dan melihat nilai *loss* serta kurva
-    akurasi per epoch secara langsung. Setelah pelatihan, demo interaktif di bagian bawah
-    langsung menggunakan bobot yang baru dilatih.
-
-    > **Ekspor PDF:** jalankan notebook secara lokal, klik *Train locally*, tunggu selesai,
-    > lalu cetak halaman (Ctrl+P → Simpan sebagai PDF) untuk laporan lengkap dengan tabel
-    > dan grafik.
+    | **Epochs** | {EPOCHS} |
+    | **Batch Size** | {BATCH_SIZE} |
+    | **Learning Rate** | {LR} |
+    | **Optimizer** | {OPTIMIZER} |
+    | **Loss Function** | {LOSS_FN} |
     """)
     return
 
@@ -307,16 +291,29 @@ def _(set_weights, train_btn):
         nn.ReLU(),
         nn.Linear(128, 10),
     ).to(_device)
-    _opt = torch.optim.Adam(_model.parameters(), lr=1e-3)
-    _loss_fn = nn.CrossEntropyLoss()
+    _optimizer_name = OPTIMIZER.strip().lower()
+    if _optimizer_name == "adam":
+        _opt = torch.optim.Adam(_model.parameters(), lr=LR)
+    elif _optimizer_name == "sgd":
+        _opt = torch.optim.SGD(_model.parameters(), lr=LR)
+    elif _optimizer_name == "rmsprop":
+        _opt = torch.optim.RMSprop(_model.parameters(), lr=LR)
+    else:
+        raise ValueError(f"Unsupported OPTIMIZER: {OPTIMIZER}")
+
+    _loss_name = LOSS_FN.strip().lower().replace(" ", "")
+    if _loss_name == "crossentropyloss":
+        _loss_fn = nn.CrossEntropyLoss()
+    else:
+        raise ValueError(f"Unsupported LOSS_FN: {LOSS_FN}")
 
     _rows = []
-    with mo.status.progress_bar(total=10, title="Melatih model...") as _bar:
-        for _epoch in range(10):
+    with mo.status.progress_bar(total=EPOCHS, title="Melatih model...") as _bar:
+        for _epoch in range(EPOCHS):
             _model.train()
             _epoch_loss, _n_batches = 0.0, 0
-            for _i in range(0, len(_Xtr), 256):
-                _xb, _yb = _Xtr[_i : _i + 256], _ytr[_i : _i + 256]
+            for _i in range(0, len(_Xtr), BATCH_SIZE):
+                _xb, _yb = _Xtr[_i : _i + BATCH_SIZE], _ytr[_i : _i + BATCH_SIZE]
                 _opt.zero_grad()
                 _l = _loss_fn(_model(_xb), _yb)
                 _l.backward()
@@ -335,7 +332,7 @@ def _(set_weights, train_btn):
                     "Test Accuracy": round(_acc, 4),
                 }
             )
-            _bar.update(title=f"epoch {_epoch + 1}/10  acc={_acc:.4f}")
+            _bar.update(title=f"epoch {_epoch + 1}/{EPOCHS}  acc={_acc:.4f}")
 
     _W1 = _model[0].weight.T.detach().cpu().numpy()
     _b1 = _model[0].bias.detach().cpu().numpy()
@@ -497,6 +494,14 @@ def _():
 
     Gambar digit di kanvas di bawah — prediksi diperbarui setiap kali Anda melepas mouse.
     Setelah klik *Train locally* di atas, model yang baru terlatih langsung digunakan di sini.
+
+    **Catatan mode Web Live (WASM)**
+
+    1. Di mode web (WASM/`emscripten`), proses training PyTorch tidak dijalankan; aplikasi memuat bobot pra-latih dari `model_weights.npz`.
+    2. Inferensi di kanvas memakai NumPy karena dependensi/eksekusi PyTorch di lingkungan WASM belum sefleksibel mode lokal.
+    3. Akurasi web live bisa berbeda dari lokal karena web memakai snapshot bobot pra-latih, sedangkan lokal bisa melatih ulang (hasil dipengaruhi inisialisasi dan proses training).
+    4. Input gambar dari kanvas bukan distribusi MNIST asli (ketebalan goresan, posisi, dan bentuk digit bisa berbeda), sehingga prediksi per sampel bisa lebih rendah dibanding evaluasi test set.
+    5. Hasil NumPy dan PyTorch umumnya sangat dekat, tetapi perbedaan kecil numerik float dan alur pra-pemrosesan tetap bisa menggeser confidence/probabilitas.
     """)
     return
 
