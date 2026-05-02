@@ -31,8 +31,9 @@ with app.setup(hide_code=True):
     LR = 0.001
     OPTIMIZER = "Adam"
     LOSS_FN = "CrossEntropyLoss"
+    IS_WASM = sys.platform == "emscripten" or "pyodide" in sys.modules
 
-    if sys.platform == "emscripten":
+    if IS_WASM:
         import urllib.request
 
         _d = np.load(
@@ -258,16 +259,19 @@ def _():
 @app.cell
 def _():
     train_btn = mo.ui.run_button(label="Train locally")
-    if sys.platform == "emscripten":
-        mo.md("_Berjalan di WASM — model pra-terlatih dimuat (akurasi ~97,5 %)._")
+    if IS_WASM:
+        _train_ui = mo.md(
+            "_Berjalan di WASM — model pra-terlatih dimuat (akurasi ~97,5 %)._"
+        )
     else:
-        train_btn
+        _train_ui = train_btn
+    _train_ui
     return (train_btn,)
 
 
 @app.cell(hide_code=False)
 def _(set_weights, train_btn):
-    mo.stop(sys.platform == "emscripten")
+    mo.stop(IS_WASM)
     mo.stop(not train_btn.value)
     try:
         import torch
