@@ -145,7 +145,7 @@ def _():
     Pipeline yang dibangun mencakup:
 
     1. Memuat dan melakukan pra-pemrosesan dataset MNIST,
-    2. Melatih model **Multi-Layer Perceptron (MLP)** tiga lapisan dari awal menggunakan PyTorch,
+    2. Melatih model **Convolutional Neural Network (CNN) LeNet-5** dari awal menggunakan PyTorch,
     3. Menyediakan antarmuka gambar interaktif untuk menguji model secara langsung.
     """)
     return
@@ -167,9 +167,10 @@ def _():
 
     ### Pra-pemrosesan Data
 
-    1. **Flatten**: gambar 28×28 piksel di-*flatten* menjadi vektor **784 dimensi**.
-    2. **Normalisasi**: nilai piksel dari rentang [0, 255] (uint8) dinormalisasi ke [0.0, 1.0]
+    1. **Normalisasi**: nilai piksel dari rentang [0, 255] (uint8) dinormalisasi ke [0.0, 1.0]
        (float32) dengan membagi 255.
+    2. **Bentuk Tensor**: untuk model CNN LeNet, setiap sampel diproses sebagai tensor
+       **1×28×28** (channel grayscale tunggal).
     """)
     return
 
@@ -210,20 +211,29 @@ def _():
     mo.md("""
     ## Arsitektur Baseline Model
 
-    **Jenis Arsitektur:** Multi-Layer Perceptron (MLP)
+    **Jenis Arsitektur:** Convolutional Neural Network (LeNet-5)
 
     | Layer | Jenis | Dimensi Output | Aktivasi |
     |:--|:--|:--|:--|
-    | Input | — | 784 | — |
-    | Hidden 1 | `nn.Linear` | 256 | ReLU |
-    | Hidden 2 | `nn.Linear` | 128 | ReLU |
-    | Output | `nn.Linear` | 10 | — (Softmax implisit via `CrossEntropyLoss`) |
+    | Input | — | 1×28×28 | — |
+    | Conv1 | `nn.Conv2d(1, 6, 5)` | 6×24×24 | ReLU |
+    | Pool1 | `nn.MaxPool2d(2, 2)` | 6×12×12 | — |
+    | Conv2 | `nn.Conv2d(6, 16, 5)` | 16×8×8 | ReLU |
+    | Pool2 | `nn.MaxPool2d(2, 2)` | 16×4×4 | — |
+    | FC1 | `nn.Linear(256, 120)` | 120 | ReLU |
+    | FC2 | `nn.Linear(120, 84)` | 84 | ReLU |
+    | Output | `nn.Linear(84, 10)` | 10 | — (Softmax implisit via `CrossEntropyLoss`) |
 
     ```
-    Input (784)
-        └─ Linear(784 → 256) + ReLU
-               └─ Linear(256 → 128) + ReLU
-                      └─ Linear(128 → 10)  →  argmax  →  Prediksi digit
+    Input (1×28×28)
+        └─ Conv2d(1→6, 5×5) + ReLU
+              └─ MaxPool(2×2)
+                    └─ Conv2d(6→16, 5×5) + ReLU
+                          └─ MaxPool(2×2)
+                                └─ Flatten (256)
+                                      └─ Linear(256→120) + ReLU
+                                            └─ Linear(120→84) + ReLU
+                                                  └─ Linear(84→10) → argmax → Prediksi digit
     ```
 
     Bobot model hasil pelatihan disimpan ke `model_weights.npz` dan dimuat ulang sebagai array
@@ -261,7 +271,7 @@ def _():
     train_btn = mo.ui.run_button(label="Train locally")
     if IS_WASM:
         _train_ui = mo.md(
-            "_Berjalan di WASM — model pra-terlatih dimuat (akurasi ~97,5 %)._"
+            "_Berjalan di WASM — model pra-terlatih dimuat._"
         )
     else:
         _train_ui = train_btn
@@ -288,21 +298,33 @@ def _(set_weights, train_btn):
     _y_train = mnist.attributes["digits"][:60000].astype(np.int64)
     _X_test = mnist.data[60000:]
     _y_test = mnist.attributes["digits"][60000:].astype(np.int64)
-    _Xtr = torch.tensor(_X_train)
+    _Xtr = torch.tensor(_X_train).view(-1, 1, 28, 28)
     _ytr = torch.tensor(_y_train)
-    _Xte = torch.tensor(_X_test)
+    _Xte = torch.tensor(_X_test).view(-1, 1, 28, 28)
     _yte = torch.tensor(_y_test)
     _device = "cuda" if torch.cuda.is_available() else "cpu"
     _Xtr, _ytr = _Xtr.to(_device), _ytr.to(_device)
     _Xte, _yte = _Xte.to(_device), _yte.to(_device)
 
-    _model = nn.Sequential(
-        nn.Linear(784, 256),
-        nn.ReLU(),
-        nn.Linear(256, 128),
-        nn.ReLU(),
-        nn.Linear(128, 10),
-    ).to(_device)
+    class _LeNet(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.conv1 = nn.Conv2d(1, 6, kernel_size=5)
+            self.pool = nn.MaxPool2d(2, 2)
+            self.conv2 = nn.Conv2d(6, 16, kernel_size=5)
+            self.fc1 = nn.Linear(16 * 4 * 4, 120)
+            self.fc2 = nn.Linear(120, 84)
+            self.fc3 = nn.Linear(84, 10)
+
+        def forward(self, x):
+            x = self.pool(torch.relu(self.conv1(x)))
+            x = self.pool(torch.relu(self.conv2(x)))
+            x = torch.flatten(x, 1)
+            x = torch.relu(self.fc1(x))
+            x = torch.relu(self.fc2(x))
+            return self.fc3(x)
+
+    _model = _LeNet().to(_device)
     _optimizer_name = OPTIMIZER.strip().lower()
     if _optimizer_name == "adam":
         _opt = torch.optim.Adam(_model.parameters(), lr=LR)
@@ -346,19 +368,17 @@ def _(set_weights, train_btn):
             )
             _bar.update(title=f"epoch {_epoch + 1}/{EPOCHS}  acc={_acc:.4f}")
 
-    _W1 = _model[0].weight.T.detach().cpu().numpy()
-    _b1 = _model[0].bias.detach().cpu().numpy()
-    _W2 = _model[2].weight.T.detach().cpu().numpy()
-    _b2 = _model[2].bias.detach().cpu().numpy()
-    _W3 = _model[4].weight.T.detach().cpu().numpy()
-    _b3 = _model[4].bias.detach().cpu().numpy()
     _trained_weights = {
-        "W1": _W1,
-        "b1": _b1,
-        "W2": _W2,
-        "b2": _b2,
-        "W3": _W3,
-        "b3": _b3,
+        "conv1.weight": _model.conv1.weight.detach().cpu().numpy(),
+        "conv1.bias": _model.conv1.bias.detach().cpu().numpy(),
+        "conv2.weight": _model.conv2.weight.detach().cpu().numpy(),
+        "conv2.bias": _model.conv2.bias.detach().cpu().numpy(),
+        "fc1.weight": _model.fc1.weight.detach().cpu().numpy(),
+        "fc1.bias": _model.fc1.bias.detach().cpu().numpy(),
+        "fc2.weight": _model.fc2.weight.detach().cpu().numpy(),
+        "fc2.bias": _model.fc2.bias.detach().cpu().numpy(),
+        "fc3.weight": _model.fc3.weight.detach().cpu().numpy(),
+        "fc3.bias": _model.fc3.bias.detach().cpu().numpy(),
     }
     set_weights(_trained_weights)
     np.savez("model_weights.npz", **_trained_weights)
@@ -538,6 +558,19 @@ def _():
 def _(canvas_ui, get_weights):
     _px = canvas_ui.value.get("pixels", [])
     _w = get_weights()
+    _lenet_keys = {
+        "conv1.weight",
+        "conv1.bias",
+        "conv2.weight",
+        "conv2.bias",
+        "fc1.weight",
+        "fc1.bias",
+        "fc2.weight",
+        "fc2.bias",
+        "fc3.weight",
+        "fc3.bias",
+    }
+    _mlp_keys = {"W1", "b1", "W2", "b2", "W3", "b3"}
 
     if not _px:
         _output = mo.md("_Gambar digit di atas untuk melihat prediksi._")
@@ -555,30 +588,80 @@ def _(canvas_ui, get_weights):
             e = np.exp(x - x.max())
             return e / e.sum()
 
-        _h1 = _relu(_flat @ _w["W1"] + _w["b1"])
-        _h2 = _relu(_h1 @ _w["W2"] + _w["b2"])
-        _logits = _h2 @ _w["W3"] + _w["b3"]
-        _probs = _softmax(_logits)
-        _pred = int(_probs.argmax())
+        if _lenet_keys.issubset(_w.keys()):
+            _img = _flat.reshape(1, 28, 28)
 
-        _colors = ["steelblue"] * 10
-        _colors[_pred] = "tomato"
-        _fig, _ax = plt.subplots(figsize=(3, 4))
-        _ax.barh(range(10), _probs, color=_colors)
-        _ax.set_yticks(range(10))
-        _ax.set_yticklabels([str(i) for i in range(10)])
-        _ax.set_xlim(0, 1)
-        _ax.set_xlabel("Confidence")
-        _ax.set_title(f"Prediksi: {_pred}")
-        _ax.invert_yaxis()
-        plt.tight_layout()
+            def _conv2d_valid(x, weight, bias):
+                _out_channels, _in_channels, _kh, _kw = weight.shape
+                _h, _wimg = x.shape[1], x.shape[2]
+                _oh, _ow = _h - _kh + 1, _wimg - _kw + 1
+                _out = np.zeros((_out_channels, _oh, _ow), dtype=np.float32)
+                for _oc in range(_out_channels):
+                    _acc = np.zeros((_oh, _ow), dtype=np.float32)
+                    for _ic in range(_in_channels):
+                        _kernel = weight[_oc, _ic]
+                        _src = x[_ic]
+                        for _yy in range(_oh):
+                            for _xx in range(_ow):
+                                _patch = _src[_yy : _yy + _kh, _xx : _xx + _kw]
+                                _acc[_yy, _xx] += np.sum(_patch * _kernel)
+                    _out[_oc] = _acc + bias[_oc]
+                return _out
 
-        _output = mo.vstack(
-            [
-                mo.md(f"### Prediksi: **{_pred}**"),
-                mo.as_html(_fig),
-            ]
-        )
+            def _maxpool2x2(x):
+                _channels, _h, _wimg = x.shape
+                _oh, _ow = _h // 2, _wimg // 2
+                _out = np.zeros((_channels, _oh, _ow), dtype=np.float32)
+                for _c in range(_channels):
+                    for _yy in range(_oh):
+                        for _xx in range(_ow):
+                            _patch = x[
+                                _c, _yy * 2 : (_yy + 1) * 2, _xx * 2 : (_xx + 1) * 2
+                            ]
+                            _out[_c, _yy, _xx] = np.max(_patch)
+                return _out
+
+            _c1 = _relu(_conv2d_valid(_img, _w["conv1.weight"], _w["conv1.bias"]))
+            _p1 = _maxpool2x2(_c1)
+            _c2 = _relu(_conv2d_valid(_p1, _w["conv2.weight"], _w["conv2.bias"]))
+            _p2 = _maxpool2x2(_c2)
+            _flat = _p2.reshape(-1)
+            _h1 = _relu(_flat @ _w["fc1.weight"].T + _w["fc1.bias"])
+            _h2 = _relu(_h1 @ _w["fc2.weight"].T + _w["fc2.bias"])
+            _logits = _h2 @ _w["fc3.weight"].T + _w["fc3.bias"]
+        elif _mlp_keys.issubset(_w.keys()):
+            _h1 = _relu(_flat @ _w["W1"] + _w["b1"])
+            _h2 = _relu(_h1 @ _w["W2"] + _w["b2"])
+            _logits = _h2 @ _w["W3"] + _w["b3"]
+        else:
+            _logits = None
+
+        if _logits is None:
+            _output = mo.md(
+                "_Format bobot tidak dikenali. Klik **Train locally** untuk membuat bobot baru._"
+            )
+        else:
+            _probs = _softmax(_logits)
+            _pred = int(_probs.argmax())
+
+            _colors = ["steelblue"] * 10
+            _colors[_pred] = "tomato"
+            _fig, _ax = plt.subplots(figsize=(3, 4))
+            _ax.barh(range(10), _probs, color=_colors)
+            _ax.set_yticks(range(10))
+            _ax.set_yticklabels([str(i) for i in range(10)])
+            _ax.set_xlim(0, 1)
+            _ax.set_xlabel("Confidence")
+            _ax.set_title(f"Prediksi: {_pred}")
+            _ax.invert_yaxis()
+            plt.tight_layout()
+
+            _output = mo.vstack(
+                [
+                    mo.md(f"### Prediksi: **{_pred}**"),
+                    mo.as_html(_fig),
+                ]
+            )
 
     _output
     return
