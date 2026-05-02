@@ -328,10 +328,6 @@ def _(set_weights, train_btn):
     _optimizer_name = OPTIMIZER.strip().lower()
     if _optimizer_name == "adam":
         _opt = torch.optim.Adam(_model.parameters(), lr=LR)
-    elif _optimizer_name == "sgd":
-        _opt = torch.optim.SGD(_model.parameters(), lr=LR)
-    elif _optimizer_name == "rmsprop":
-        _opt = torch.optim.RMSprop(_model.parameters(), lr=LR)
     else:
         raise ValueError(f"Unsupported OPTIMIZER: {OPTIMIZER}")
 
