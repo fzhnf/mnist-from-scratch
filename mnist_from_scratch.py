@@ -87,7 +87,7 @@ def _():
     return
 
 
-@app.class_definition
+@app.class_definition(hide_code=True)
 class DrawWidget(anywidget.AnyWidget):
     _esm = """
     function render({ model, el }) {
