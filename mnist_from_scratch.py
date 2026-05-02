@@ -16,6 +16,26 @@ __generated_with = "0.23.4"
 app = marimo.App(width="medium")
 
 with app.setup:
+
+    @app.cell(hide_code=True)
+    def _():
+        mo.md("""
+        # Klasifikasi Digit MNIST Kelompok 4
+        
+        anggota:
+
+        1. Azhar Rizqullah Fakhri Ismail 11221052 
+        1. Pahril Dwi Saputra 11221056 
+        1. Faiz Ahnaf Samudra Aziz 11221076 
+        1. Ayu Nabila Andara Wati 11221084 
+
+        **Link Live Preview Aplikasi (WASM):** https://molab.marimo.io/github/fzhnf/mnist-from-scratch/blob/main/mnist_from_scratch.py/wasm
+        **Link Source code:** https://github.com/fzhnf/mnist-from-scratch
+
+        ---
+        """)
+        return
+
     import marimo as mo
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -104,25 +124,6 @@ class DrawWidget(anywidget.AnyWidget):
     export default { render };
     """
     pixels = traitlets.List([]).tag(sync=True)
-
-
-@app.cell(hide_code=True)
-def _():
-    mo.md("""
-    # Klasifikasi Digit MNIST Kelompok 4
-    
-    anggota:
-
-    1. Azhar Rizqullah Fakhri Ismail 11221052 
-    1. Pahril Dwi Saputra 11221056 
-    1. Faiz Ahnaf Samudra Aziz 11221076 
-    1. Ayu Nabila Andara Wati 11221084 
-
-    **Link Source code:** https://github.com/fzhnf/mnist-from-scratch
-
-    ---
-    """)
-    return
 
 
 @app.cell(hide_code=True)
