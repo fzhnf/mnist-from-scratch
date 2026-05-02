@@ -16,26 +16,6 @@ __generated_with = "0.23.4"
 app = marimo.App(width="medium")
 
 with app.setup:
-
-    @app.cell(hide_code=True)
-    def _():
-        mo.md("""
-        # Klasifikasi Digit MNIST Kelompok 4
-        
-        anggota:
-
-        1. Azhar Rizqullah Fakhri Ismail 11221052 
-        1. Pahril Dwi Saputra 11221056 
-        1. Faiz Ahnaf Samudra Aziz 11221076 
-        1. Ayu Nabila Andara Wati 11221084 
-
-        **Link Live Preview Aplikasi (WASM):** https://molab.marimo.io/github/fzhnf/mnist-from-scratch/blob/main/mnist_from_scratch.py/wasm
-        **Link Source code:** https://github.com/fzhnf/mnist-from-scratch
-
-        ---
-        """)
-        return
-
     import marimo as mo
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -43,7 +23,7 @@ with app.setup:
     import anywidget
     import traitlets
     from types import SimpleNamespace
-    import sys, io
+    import sys, io, os
 
     _REPO = "https://raw.githubusercontent.com/fzhnf/mnist-from-scratch/main/"
     EPOCHS = 10
@@ -67,7 +47,14 @@ with app.setup:
     else:
         _d = np.load("mnist_data.npz")
         _emb = np.load("embedding.npy")
-        _w = np.load("model_weights.npz")
+        _w = (
+            np.load("model_weights.npz")
+            if os.path.exists("model_weights.npz")
+            else None
+        )
+
+    if _w is not None and hasattr(_w, "files"):
+        _w = {k: _w[k] for k in _w.files}
 
     mnist = SimpleNamespace(
         data=_d["X"].astype(np.float32) / 255.0,
@@ -75,6 +62,26 @@ with app.setup:
         embedding=_emb,
         weights=_w,
     )
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md("""
+    # Klasifikasi Digit MNIST Kelompok 4
+
+    anggota:
+
+    1. Azhar Rizqullah Fakhri Ismail 11221052
+    1. Pahril Dwi Saputra 11221056
+    1. Faiz Ahnaf Samudra Aziz 11221076
+    1. Ayu Nabila Andara Wati 11221084
+
+    **Link Live Preview Aplikasi (WASM):** https://molab.marimo.io/github/fzhnf/mnist-from-scratch/blob/main/mnist_from_scratch.py/wasm
+    **Link Source code:** https://github.com/fzhnf/mnist-from-scratch
+
+    ---
+    """)
+    return
 
 
 @app.class_definition
@@ -160,7 +167,7 @@ def _():
     ### Pra-pemrosesan Data
 
     1. **Flatten**: gambar 28×28 piksel di-*flatten* menjadi vektor **784 dimensi**.
-    2. **Normalisasi**: nilai piksel dari rentang \[0, 255\] (uint8) dinormalisasi ke \[0.0, 1.0\]
+    2. **Normalisasi**: nilai piksel dari rentang [0, 255] (uint8) dinormalisasi ke [0.0, 1.0]
        (float32) dengan membagi 255.
     """)
     return
@@ -341,7 +348,16 @@ def _(set_weights, train_btn):
     _b2 = _model[2].bias.detach().cpu().numpy()
     _W3 = _model[4].weight.T.detach().cpu().numpy()
     _b3 = _model[4].bias.detach().cpu().numpy()
-    set_weights({"W1": _W1, "b1": _b1, "W2": _W2, "b2": _b2, "W3": _W3, "b3": _b3})
+    _trained_weights = {
+        "W1": _W1,
+        "b1": _b1,
+        "W2": _W2,
+        "b2": _b2,
+        "W3": _W3,
+        "b3": _b3,
+    }
+    set_weights(_trained_weights)
+    np.savez("model_weights.npz", **_trained_weights)
 
     _df = pd.DataFrame(_rows)
     _fig, (_ax1, _ax2) = plt.subplots(1, 2, figsize=(10, 3.5))
@@ -517,12 +533,16 @@ def _():
 @app.cell(hide_code=True)
 def _(canvas_ui, get_weights):
     _px = canvas_ui.value.get("pixels", [])
+    _w = get_weights()
 
     if not _px:
         _output = mo.md("_Gambar digit di atas untuk melihat prediksi._")
+    elif _w is None:
+        _output = mo.md(
+            "_`model_weights.npz` tidak ditemukan. Klik **Train locally** untuk membuat bobot baru._"
+        )
     else:
         _flat = np.array(_px, dtype=np.float32)
-        _w = get_weights()
 
         def _relu(x):
             return np.maximum(0, x)
