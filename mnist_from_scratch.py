@@ -23,7 +23,9 @@ with app.setup(hide_code=True):
     import anywidget
     import traitlets
     from types import SimpleNamespace
-    import sys, io, os
+    import sys
+    import io
+    import os
 
     _REPO = "https://raw.githubusercontent.com/fzhnf/mnist-from-scratch/main/"
     EPOCHS = 10
@@ -237,7 +239,7 @@ def _():
     ```
 
     Bobot model hasil pelatihan disimpan ke `model_weights.npz` dan dimuat ulang sebagai array
-    NumPy biasa.
+    NumPy biasa. Format utama saat ini adalah bobot LeNet (`conv*` dan `fc*`).
     """)
     return
 
@@ -270,9 +272,7 @@ def _():
 def _():
     train_btn = mo.ui.run_button(label="Train locally")
     if IS_WASM:
-        _train_ui = mo.md(
-            "_Berjalan di WASM — model pra-terlatih dimuat._"
-        )
+        _train_ui = mo.md("_Berjalan di WASM — model pra-terlatih dimuat._")
     else:
         _train_ui = train_btn
     _train_ui
@@ -543,6 +543,7 @@ def _():
     3. Akurasi web live bisa berbeda dari lokal karena web memakai snapshot bobot pra-latih, sedangkan lokal bisa melatih ulang (hasil dipengaruhi inisialisasi dan proses training).
     4. Input gambar dari kanvas bukan distribusi MNIST asli (ketebalan goresan, posisi, dan bentuk digit bisa berbeda), sehingga prediksi per sampel bisa lebih rendah dibanding evaluasi test set.
     5. Hasil NumPy dan PyTorch umumnya sangat dekat, tetapi perbedaan kecil numerik float dan alur pra-pemrosesan tetap bisa menggeser confidence/probabilitas.
+    6. Jika file bobot lama masih dipakai, klik **Train locally** untuk menghasilkan bobot LeNet terbaru.
     """)
     return
 
