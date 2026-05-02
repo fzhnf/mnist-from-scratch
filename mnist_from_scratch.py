@@ -15,7 +15,7 @@ import marimo
 __generated_with = "0.23.4"
 app = marimo.App(width="medium")
 
-with app.setup:
+with app.setup(hide_code=True):
     import marimo as mo
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -64,7 +64,7 @@ with app.setup:
     )
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _():
     mo.md("""
     # Klasifikasi Digit MNIST Kelompok 4
@@ -133,7 +133,7 @@ class DrawWidget(anywidget.AnyWidget):
     pixels = traitlets.List([]).tag(sync=True)
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _():
     mo.md("""
     ## Pendahuluan & Tujuan Eksperimen Awal
@@ -150,7 +150,7 @@ def _():
     return
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _():
     mo.md("""
     ## Metodologi Data (Data Pipeline)
@@ -173,7 +173,7 @@ def _():
     return
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _():
     _indices = [int(np.where(mnist.attributes["digits"] == d)[0][0]) for d in range(10)]
     _images = mnist.data.reshape(-1, 28, 28)[_indices]
@@ -188,7 +188,7 @@ def _():
     return
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _():
     _counts = np.bincount(mnist.attributes["digits"][:60000].astype(int), minlength=10)
     _fig, _ax = plt.subplots(figsize=(7, 3))
@@ -204,7 +204,7 @@ def _():
     return
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _():
     mo.md("""
     ## Arsitektur Baseline Model
@@ -231,13 +231,13 @@ def _():
     return
 
 
-@app.cell
+@app.cell(hide_code=False)
 def _():
     get_weights, set_weights = mo.state(mnist.weights)
     return get_weights, set_weights
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _():
     mo.md(f"""
     ## Hasil Eksperimen Training
@@ -255,7 +255,7 @@ def _():
     return
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _():
     train_btn = mo.ui.run_button(label="Train locally")
     if sys.platform == "emscripten":
@@ -265,7 +265,7 @@ def _():
     return (train_btn,)
 
 
-@app.cell
+@app.cell(hide_code=False)
 def _(set_weights, train_btn):
     mo.stop(sys.platform == "emscripten")
     mo.stop(not train_btn.value)
@@ -389,7 +389,7 @@ def _(set_weights, train_btn):
     return
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _():
     mo.md("""
     ## Visualisasi Ruang Fitur (Feature Space)
@@ -400,13 +400,13 @@ def _():
     return
 
 
-@app.cell
+@app.cell(hide_code=False)
 def _():
     embedding = mnist.embedding
     return (embedding,)
 
 
-@app.cell
+@app.cell(hide_code=False)
 def _(embedding):
     _colors = [
         "#e41a1c",
@@ -437,19 +437,19 @@ def _(embedding):
     return (ax,)
 
 
-@app.cell
+@app.cell(hide_code=False)
 def _(ax, embedding):
     mask = ax.value.get_mask(embedding[:, 0], embedding[:, 1])
     return (mask,)
 
 
-@app.cell
+@app.cell(hide_code=False)
 def _(df, mask):
     table = mo.ui.table(df[mask])
     return (table,)
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _(mask, table):
     mo.stop(not mask.any())
     selected_images = (
@@ -490,7 +490,7 @@ def show_images(indices, max_images=10):
     return fig
 
 
-@app.cell
+@app.cell(hide_code=False)
 def _(embedding):
     indices = np.arange(mnist.data.shape[0])
     df = pd.DataFrame(
@@ -504,7 +504,7 @@ def _(embedding):
     return (df,)
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _():
     mo.md("""
     ## Demo Interaktif
@@ -523,14 +523,14 @@ def _():
     return
 
 
-@app.cell
+@app.cell(hide_code=False)
 def _():
     canvas_ui = mo.ui.anywidget(DrawWidget())
     canvas_ui
     return (canvas_ui,)
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _(canvas_ui, get_weights):
     _px = canvas_ui.value.get("pixels", [])
     _w = get_weights()
